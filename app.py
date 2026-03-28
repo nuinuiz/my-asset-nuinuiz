@@ -3,117 +3,96 @@ import pandas as pd
 import plotly.express as px
 
 # --- 1. การตั้งค่าหน้าจอ ---
-st.set_page_config(page_title="My Stock Portfolio", layout="wide", page_icon="📈")
+st.set_page_config(page_title="My Wealth Tracker", layout="wide", page_icon="💰")
 
 # ส่วนหัวของแอป
-st.title("📈 Dashboard ติดตามพอร์ตหุ้นส่วนตัว")
+st.title("📂 ระบบบันทึกสินทรัพย์และปันผลส่วนตัว")
 st.markdown("---")
 
-# --- 2. ฟังก์ชันจำลองข้อมูล (ในอนาคตเราจะเปลี่ยนเป็นดึงจาก Google Sheets/Database) ---
-@st.cache_data # ช่วยให้แอปโหลดเร็วขึ้น ไม่ต้องคำนวณใหม่ทุกครั้งที่กดปุ่ม
-def load_data():
-    # สมมติข้อมูลหุ้นในพอร์ตของคุณ
-    data = {
-        'TICKER': ['AOT', 'CPALL', 'PTT', 'ADVANC'],
-        'ชื่อหุ้น': ['ท่าอากาศยานไทย', 'ซีพี ออลล์', 'ปตท.', 'แอดวานซ์ อินโฟร์'],
-        'จำนวนหุ้น': [1000, 2000, 5000, 500],
-        'ราคาซื้อเฉลี่ย': [65.00, 60.50, 32.25, 210.00],
-        # ในแอปจริง ส่วนนี้ต้องดึงราคาปัจจุบันจาก API (เช่น yfinance)
-        'ราคาปัจจุบัน': [72.25, 68.75, 34.00, 245.00] 
-    }
+# --- 2. ฟังก์ชันโหลดข้อมูล (จำลองรายการสินทรัพย์ของคุณ) ---
+@st.cache_data
+def load_assets():
+    # ข้อมูลตัวอย่าง: คุณสามารถแก้ไขตัวเลขตรงนี้เป็นของคุณได้เลย
+    data = [
+        {"ประเภท": "หุ้นตลาดหลักทรัพย์", "ชื่อ": "CPALL", "จำนวน": 1000, "ราคาซื้อ": 60.00, "ราคาปัจจุบัน": 65.00, "ปันผลต่อหุ้น": 1.00},
+        {"ประเภท": "หุ้นตลาดหลักทรัพย์", "ชื่อ": "PTT", "จำนวน": 2000, "ราคาซื้อ": 32.00, "ราคาปัจจุบัน": 34.50, "ปันผลต่อหุ้น": 1.20},
+        {"ประเภท": "หุ้นสหกรณ์", "ชื่อ": "สหกรณ์ออมทรัพย์ ก.", "จำนวน": 5000, "ราคาซื้อ": 10.00, "ราคาปัจจุบัน": 10.00, "ปันผลต่อหุ้น": 0.50}, # หุ้นสหกรณ์ปกติราคาคงที่ 10 บาท
+        {"ประเภท": "หุ้นสหกรณ์", "ชื่อ": "สหกรณ์ออมทรัพย์ ข.", "จำนวน": 10000, "ราคาซื้อ": 10.00, "ราคาปัจจุบัน": 10.00, "ปันผลต่อหุ้น": 0.45},
+    ]
     df = pd.DataFrame(data)
     
-    # คำนวณค่าต่างๆ เพิ่มเติม
-    df['มูลค่าทุน'] = df['จำนวนหุ้น'] * df['ราคาซื้อเฉลี่ย']
-    df['มูลค่าปัจจุบัน'] = df['จำนวนหุ้น'] * df['ราคาปัจจุบัน']
-    df['กำไร/ขาดทุน (บาท)'] = df['มูลค่าปัจจุบัน'] - df['มูลค่าทุน']
-    df['% กำไร/ขาดทุน'] = (df['กำไร/ขาดทุน (บาท)'] / df['มูลค่าทุน']) * 100
+    # คำนวณมูลค่า
+    df['มูลค่าต้นทุน'] = df['จำนวน'] * df['ราคาซื้อ']
+    df['มูลค่าปัจจุบัน'] = df['จำนวน'] * df['ราคาปัจจุบัน']
+    df['กำไร/ขาดทุน'] = df['มูลค่าปัจจุบัน'] - df['มูลค่าต้นทุน']
+    df['ปันผลคาดการณ์'] = df['จำนวน'] * df['ปันผลต่อหุ้น']
+    df['Yield (%)'] = (df['ปันผลต่อหุ้น'] / df['ราคาซื้อ']) * 100
     
     return df
 
-# โหลดข้อมูลมาใช้งาน
-df_portfolio = load_data()
+df = load_assets()
 
-# --- 3. ส่วนแสดงผลตัวเลขสำคัญ (Metrics Cards) ---
-st.subheader("📊 สรุปภาพรวมพอร์ต")
+# --- 3. ส่วนสรุปตัวเลขสำคัญ (Top Metrics) ---
+total_cost = df['มูลค่าต้นทุน'].sum()
+total_value = df['มูลค่าปัจจุบัน'].sum()
+total_dividend = df['ปันผลคาดการณ์'].sum()
+total_pnl = df['กำไร/ขาดทุน'].sum()
 
-# คำนวณยอดรวม
-total_cost = df_portfolio['มูลค่าทุน'].sum()
-total_value = df_portfolio['มูลค่าปัจจุบัน'].sum()
-total_pnl = df_portfolio['กำไร/ขาดทุน (บาท)'].sum()
-total_pnl_percent = (total_pnl / total_cost) * 100 if total_cost > 0 else 0
-
-# สร้าง 3 คอลัมน์สำหรับ Card
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(
-        label="💰 มูลค่าต้นทุนรวม",
-        value=f"{total_cost:,.2f} บาท"
-    )
-
+    st.metric("💰 ต้นทุนรวม", f"{total_cost:,.2f} บาท")
 with col2:
-    st.metric(
-        label="🚀 มูลค่าปัจจุบันรวม",
-        value=f"{total_value:,.2f} บาท",
-        delta=f"{total_pnl:,.2f} บาท ({total_pnl_percent:.2f}%)"
-    )
-
+    st.metric("🚀 มูลค่าปัจจุบัน", f"{total_value:,.2f} บาท", delta=f"{total_pnl:,.2f}")
 with col3:
-    # แสดงจำนวนหุ้นที่มีในพอร์ต
-    st.metric(
-        label="🏢 จำนวนบริษัทที่ถือ",
-        value=f"{len(df_portfolio)} บริษัท"
-    )
+    st.metric("💸 ปันผลรวมต่อปี", f"{total_dividend:,.2f} บาท")
+with col4:
+    avg_yield = (total_dividend / total_cost) * 100 if total_cost > 0 else 0
+    st.metric("📈 Yield เฉลี่ยพอร์ต", f"{avg_yield:.2f}%")
 
 st.markdown("---")
 
-# --- 4. ส่วนตารางข้อมูลและกราฟ ---
-col_table, col_chart = st.columns([2, 1]) # แบ่งสัดส่วนตาราง 2 ส่วน กราฟ 1 ส่วน
+# --- 4. กราฟและตารางแยกตามประเภท ---
+tab1, tab2 = st.tabs(["📊 สรุปแยกประเภท", "📋 รายละเอียดสินทรัพย์"])
 
-with col_table:
-    st.subheader("📄 รายละเอียดหุ้นรายตัว")
+with tab1:
+    col_pie, col_bar = st.columns(2)
     
-    # จัดรูปแบบการแสดงผลตัวเลขในตารางให้สวยงาม
-    formatted_df = df_portfolio.style.format({
-        'ราคาซื้อเฉลี่ย': '{:,.2f}',
-        'ราคาปัจจุบัน': '{:,.2f}',
-        'มูลค่าทุน': '{:,.2f}',
-        'มูลค่าปัจจุบัน': '{:,.2f}',
-        'กำไร/ขาดทุน (บาท)': '{:,.2f}',
-        '% กำไร/ขาดทุน': '{:.2f}%'
-    })
-    
-    # แสดงตารางแบบ Interactive (เรียงลำดับได้)
-    st.dataframe(formatted_df, use_container_width=True)
+    with col_pie:
+        st.subheader("สัดส่วนสินทรัพย์")
+        fig_pie = px.pie(df, values='มูลค่าปัจจุบัน', names='ประเภท', hole=0.4)
+        st.plotly_chart(fig_pie, use_container_width=True)
+        
+    with col_bar:
+        st.subheader("ปันผลคาดการณ์รายตัว")
+        fig_bar = px.bar(df, x='ชื่อ', y='ปันผลคาดการณ์', color='ประเภท', text_auto='.2s')
+        st.plotly_chart(fig_bar, use_container_width=True)
 
-with col_chart:
-    st.subheader("🎡 สัดส่วนพอร์ต (Donut Chart)")
-    
-    # สร้างกราฟวงกลมแสดงสัดส่วนมูลค่าปัจจุบันของหุ้นแต่ละตัว
-    fig = px.pie(
-        df_portfolio, 
-        values='มูลค่าปัจจุบัน', 
-        names='TICKER', 
-        hole=0.5, # ทำให้เป็นวงแหวน (Donut)
-        color_discrete_sequence=px.colors.qualitative.Plotly # ใช้ชุดสีที่สวยงาม
-    )
-    
-    # ปรับแต่งกราฟเล็กน้อย
-    fig.update_traces(textposition='inside', textinfo='percent+label')
-    fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
-    
-    st.plotly_chart(fig, use_container_width=True)
+with tab2:
+    st.subheader("ตารางข้อมูลสินทรัพย์ทั้งหมด")
+    # แสดงตารางแบบจัดรูปแบบสวยงาม
+    st.dataframe(df.style.format({
+        "ราคาซื้อ": "{:,.2f}",
+        "ราคาปัจจุบัน": "{:,.2f}",
+        "มูลค่าต้นทุน": "{:,.2f}",
+        "มูลค่าปัจจุบัน": "{:,.2f}",
+        "กำไร/ขาดทุน": "{:,.2f}",
+        "ปันผลต่อหุ้น": "{:,.2f}",
+        "ปันผลคาดการณ์": "{:,.2f}",
+        "Yield (%)": "{:.2f}%"
+    }), use_container_width=True)
 
-st.markdown("---")
-
-# --- 5. ส่วน Sidebar สำหรับจัดการข้อมูล (ตัวอย่าง) ---
+# --- 5. Sidebar สำหรับเพิ่มข้อมูล (จำลอง) ---
 with st.sidebar:
-    st.header("⚙️ จัดการพอร์ต")
-    st.write("ฟังก์ชันเสริมในอนาคต:")
-    st.button("➕ เพิ่มหุ้นใหม่")
-    st.button("➖ ขายหุ้น")
-    st.button("🔄 อัปเดตราคาล่าสุด (API)")
+    st.header("➕ เพิ่มข้อมูลใหม่")
+    new_type = st.selectbox("ประเภทสินทรัพย์", ["หุ้นตลาดหลักทรัพย์", "หุ้นสหกรณ์"])
+    new_name = st.text_input("ชื่อหุ้น/สหกรณ์")
+    new_qty = st.number_input("จำนวนหุ้น", min_value=0)
+    new_price = st.number_input("ราคาซื้อเฉลี่ย", min_value=0.0)
+    new_div = st.number_input("ปันผลต่อหุ้นที่คาดว่าจะได้รับ", min_value=0.0)
     
+    if st.button("บันทึกข้อมูล (จำลอง)"):
+        st.success(f"บันทึก {new_name} เรียบร้อยแล้ว! (ในเวอร์ชันถัดไปข้อมูลนี้จะถูกเก็บลงฐานข้อมูลจริง)")
+
     st.markdown("---")
-    st.info("💡 ใบอนุญาต: ใช้เพื่อการศึกษาและการจัดการการเงินส่วนตัวเท่านั้น")
+    st.info("หมายเหตุ: ราคาหุ้นตลาดหลักทรัพย์ในระบบนี้ยังเป็นราคาที่คุณระบุเอง (Manual Update)")
