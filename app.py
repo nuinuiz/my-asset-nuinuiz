@@ -59,14 +59,14 @@ if not df.empty:
     m1, m2, m3, m4 = st.columns(4)
     
     with m1:
-        st.metric("Portfolio Value", f"฿{t_val:,.0f}", delta=f"{t_pnl:,.0f} BHT")
+        st.metric("มูลค่าทั้งหมด", f"฿{t_val:,.0f}", delta=f"{t_pnl:,.0f} BHT")
     with m2:
         # แสดงกำไรเป็น %
-        st.metric("Total Profit", f"฿{t_pnl:,.0f}", delta=f"{(t_pnl/df['มูลค่าต้นทุน'].sum()*100):.2f}%")
+        st.metric("กำไรทั้งหมด", f"฿{t_pnl:,.0f}", delta=f"{(t_pnl/df['มูลค่าต้นทุน'].sum()*100):.2f}%")
     with m3:
-        st.metric("Annual Dividend", f"฿{t_div:,.0f}", delta="Expected Yearly")
+        st.metric("ปันผลทั้งปี", f"฿{t_div:,.0f}", delta="Expected Yearly")
     with m4:
-        st.metric("Monthly Passive Income", f"฿{(t_div/12):,.0f}", delta=f"Yield {t_yield:.2f}%")
+        st.metric("เฉลี่ยต่อเดือน", f"฿{(t_div/12):,.0f}", delta=f"Yield {t_yield:.2f}%")
 
     st.divider()
 
