@@ -3,30 +3,20 @@ import pandas as pd
 import plotly.express as px
 import yfinance as yf
 
-st.set_page_config(page_title="Professional Asset Dashboard", layout="wide")
+st.set_page_config(page_title="Unified Color Dashboard", layout="wide", page_icon="🎨")
 
-# --- 1. Custom CSS เพื่อทำให้ Metrics ดูเหมือนรูปที่คุณส่งมา ---
-st.markdown("""
-<style>
-    [data-testid="stMetricValue"] { font-size: 32px; color: #1f77b4; }
-    .main-card {
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        padding: 20px;
-        border-left: 5px solid #1f77b4;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# --- 2. การโหลดข้อมูล (ใช้ลิงก์เดิมของคุณ) ---
+# --- 1. การโหลดข้อมูลและคำนวณ ---
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ9PsXhJc-U5S2_KkWxareZt2uQpHAkcvRSecBnE0GgJ5bBZ0BQ8AdG5uXdIXi8Y3zkp7u_OyhFE4j_/pub?gid=138264559&single=true&output=csv"
 
-@st.cache_data(ttl=60)
-def get_data():
+@st.cache_data(ttl=600)
+def get_unified_data():
     try:
+        # ดึงข้อมูลและจัดการค่าว่าง
         df = pd.read_csv(SHEET_CSV_URL).fillna(0)
+        
+        # จัดการชื่อประเภทให้ตรงกัน
         df['ประเภท'] = df['ประเภท'].replace('SET', 'หุ้นตลาดหลักทรัพย์')
+        
         current_prices = []
         for index, row in df.iterrows():
             if row['ประเภท'] == 'หุ้นตลาดหลักทรัพย์':
@@ -38,65 +28,101 @@ def get_data():
             else: current_prices.append(row['ราคาปัจจุบัน'])
         
         df['ราคาปัจจุบัน'] = current_prices
+        
+        # สูตรคำนวณยอดต่างๆ
         df['มูลค่าต้นทุน'] = df['จำนวน'] * df['ราคาซื้อ']
         df['มูลค่าปัจจุบัน'] = df['จำนวน'] * df['ราคาปัจจุบัน']
-        df['กำไร/ขาดทุน'] = df['มูลค่าปัจจุบัน'] - df['มูลค่าต้นทุน']
         df['ปันผลรวม'] = df['จำนวน'] * df['ปันผลต่อหุ้น']
+        df['กำไร/ขาดทุน'] = df['มูลค่าปัจจุบัน'] - df['มูลค่าต้นทุน']
+        df['% กำไร/ขาดทุน'] = (df['กำไร/ขาดทุน'] / df['มูลค่าต้นทุน']) * 100
+        df['Yield (%)'] = (df['ปันผลรวม'] / df['มูลค่าต้นทุน']) * 100
+        
         return df
-    except: return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return pd.DataFrame()
 
-df = get_data()
+df = get_unified_data()
 
+# --- 2. การกำหนดสี (Unified Colors) ---
+# เราจะใช้สีน้ำเงินสำหรับหุ้น SET และสีเขียวสำหรับสหกรณ์
+color_map = {
+    'หุ้นตลาดหลักทรัพย์': '#1f77b4', # สีน้ำเงิน
+    'หุ้นสหกรณ์': '#2ca02c'           # สีเขียว
+}
+
+# --- 3. Custom CSS เพื่อทำให้ Metrics มีสีตามประเภท ---
+# เราจะสร้าง Class พิเศษสำหรับสีแต่ละประเภท
+st.markdown(f"""
+<style>
+    .set-metric data-testid="stMetricDelta" {{ color: {color_map['หุ้นตลาดหลักทรัพย์']}; }}
+    .coop-metric data-testid="stMetricDelta" {{ color: {color_map['หุ้นสหกรณ์']}; }}
+    
+    [data-testid="stMetricValue"] {{ font-size: 32px; color: #333; }}
+</style>
+""", unsafe_allow_html=True)
+
+# --- 4. แสดงผล Dashboard ---
 if not df.empty:
-    st.title("📈 Asset & Dividend Dashboard")
-
-    # --- 3. ส่วน Metrics แบบสวยงาม (ตามรูปที่อยากได้) ---
-    t_val = df['มูลค่าปัจจุบัน'].sum()
-    t_pnl = df['กำไร/ขาดทุน'].sum()
-    t_div = df['ปันผลรวม'].sum()
-    t_yield = (t_div / df['มูลค่าต้นทุน'].sum()) * 100
-
+    st.title("🎨 พอร์ตสินทรัพย์และปันผล (สีสัมพันธ์กัน)")
+    
+    # คำนวณยอดรวมแยกประเภท
+    set_cost = df[df['ประเภท'] == 'หุ้นตลาดหลักทรัพย์']['มูลค่าต้นทุน'].sum()
+    set_div = df[df['ประเภท'] == 'หุ้นตลาดหลักทรัพย์']['ปันผลรวม'].sum()
+    set_yield = (set_div / set_cost) * 100 if set_cost > 0 else 0
+    
+    coop_cost = df[df['ประเภท'] == 'หุ้นสหกรณ์']['มูลค่าต้นทุน'].sum()
+    coop_div = df[df['ประเภท'] == 'หุ้นสหกรณ์']['ปันผลรวม'].sum()
+    coop_yield = (coop_div / coop_cost) * 100 if coop_cost > 0 else 0
+    
+    total_val = df['มูลค่าปัจจุบัน'].sum()
+    total_div = df['ปันผลรวม'].sum()
+    
+    # --- 4.1 Metrics แบบกำหนดสี ---
     m1, m2, m3, m4 = st.columns(4)
     
-    with m1:
-        st.metric("มูลค่าทั้งหมด", f"฿{t_val:,.0f}", delta=f"{t_pnl:,.0f} BHT")
+    m1.metric("มูลค่าปัจจุบันรวม", f"฿{total_val:,.0f}")
+    
+    # Metrics สำหรับหุ้น SET (ใช้ Class 'set-metric' เพื่อกำหนดสีน้ำเงิน)
     with m2:
-        # แสดงกำไรเป็น %
-        st.metric("กำไรทั้งหมด", f"฿{t_pnl:,.0f}", delta=f"{(t_pnl/df['มูลค่าต้นทุน'].sum()*100):.2f}%")
+        st.markdown('<div class="set-metric">', unsafe_allow_html=True)
+        st.metric("ปันผลรวมรายปี (SET)", f"฿{set_div:,.0f}", delta=f"Yield {set_yield:.2f}%")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+    # Metrics สำหรับหุ้นสหกรณ์ (ใช้ Class 'coop-metric' เพื่อกำหนดสีเขียว)
     with m3:
-        st.metric("ปันผลทั้งปี", f"฿{t_div:,.0f}", delta="Expected Yearly")
-    with m4:
-        st.metric("เฉลี่ยต่อเดือน", f"฿{(t_div/12):,.0f}", delta=f"Yield {t_yield:.2f}%")
+        st.markdown('<div class="coop-metric">', unsafe_allow_html=True)
+        st.metric("ปันผลรวมรายปี (สหกรณ์)", f"฿{coop_div:,.0f}", delta=f"Yield {coop_yield:.2f}%")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+    m4.metric("ปันผลเฉลี่ยรายเดือน", f"฿{(total_div/12):,.0f}", delta=f"Yield {((total_div/df['มูลค่าต้นทุน'].sum())*100):.2f}%")
 
     st.divider()
 
-    # --- 4. ส่วนกราฟ (เน้นปันผลและสัดส่วน) ---
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("📊 มูลค่าสินทรัพย์แยกตามตัว")
-        fig1 = px.bar(df, x='ชื่อ', y='มูลค่าปัจจุบัน', color='ประเภท', text_auto='.2s')
-        st.plotly_chart(fig1, use_container_width=True)
+    # --- 4.2 กราฟแท่งแบบกำหนดสีตามประเภท ---
+    st.subheader("📊 มูลค่าสินทรัพย์แยกตามตัว (สีสัมพันธ์กัน)")
     
-    with c2:
-        st.subheader("💸 เงินปันผลที่จะได้รับ (บาท/ปี)")
-        fig2 = px.bar(df, x='ชื่อ', y='ปันผลรวม', color_discrete_sequence=['#2ca02c'], text_auto='.2s')
-        st.plotly_chart(fig2, use_container_width=True)
+    # ใช้สีแยกตามประเภท (SET หรือ สหกรณ์)
+    fig_bar = px.bar(df, x='ชื่อ', y='มูลค่าปัจจุบัน', color='ประเภท', 
+                     color_discrete_map=color_map, # กำหนดสีตามที่เรากำหนดไว้
+                     text_auto='.2s', title="เปรียบเทียบขนาดสินทรัพย์")
+    st.plotly_chart(fig_bar, use_container_width=True)
 
     st.divider()
 
-    # --- 5. ตารางแบบ Fit หน้าจอ (Full Width) ---
-    st.subheader("📋 รายละเอียดพอร์ตโฟลิโอ")
+    # --- 4.3 ตารางข้อมูลแยกตามประเภท ---
+    st.subheader("📋 รายละเอียดข้อมูลแบบตาราง (Fit หน้าจอ)")
     
-    # เลือกคอลัมน์และจัดลำดับใหม่
+    # เลือกคอลัมน์สำคัญมาโชว์
     display_df = df[['ประเภท', 'ชื่อ', 'จำนวน', 'ราคาซื้อ', 'ราคาปัจจุบัน', 'กำไร/ขาดทุน', 'ปันผลรวม']]
     
-    st.dataframe(
-        display_df.style.format({
-            'จำนวน': '{:,.0f}', 'ราคาซื้อ': '{:,.2f}', 'ราคาปัจจุบัน': '{:,.2f}',
-            'กำไร/ขาดทุน': '{:,.2f}', 'ปันผลรวม': '{:,.2f}'
-        }).set_properties(**{'background-color': '#ffffff', 'color': '#333'}),
-        use_container_width=True # ทำให้ตารางขยาย Fit หน้าจอ
-    )
+    # จัดรูปแบบตารางให้สวยงาม
+    formatted_df = display_df.style.format({
+        'จำนวน': '{:,.0f}', 'ราคาซื้อ': '{:,.2f}', 'ราคาปัจจุบัน': '{:,.2f}',
+        'กำไร/ขาดทุน': '{:,.2f}', 'ปันผลรวม': '{:,.2f}'
+    })
+    
+    st.dataframe(formatted_df, use_container_width=True)
 
 else:
-    st.info("กำลังดึงข้อมูลล่าสุด...")
+    st.info("กรุณาตรวจสอบการเชื่อมต่อ Google Sheets")
